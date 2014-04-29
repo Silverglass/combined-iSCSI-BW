@@ -3503,6 +3503,10 @@ static int kiscsi_data_xmit(struct iscsi_conn *conn)
 	conn->in_progress_xmit = IN_PROGRESS_XMIT_SCSI;
 	
 	
+
+
+
+    
 	return 0;
 }
 
