@@ -22,7 +22,7 @@
 #ifndef __INIC_H__
 #define __INIC_H__
 
-
+//this is a test
 int inic_generic_local_init(void);
 int inic_data_global_init(void);
 int inic_data_local_init(void);
