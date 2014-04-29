@@ -324,7 +324,7 @@ more:
         conn->in.copied = 0;
         if (conn->in_progress == IN_PROGRESS_WAIT_HEADER || conn->in_progress == IN_PROGRESS_HEADER_GATHER)
         {
-                // ³é¿²¿Ð¿
+                // Â³Ã©Â¿Â²Â¿ÃÂ¿
                 rc = kiscsi_hdr_extract(conn);
                 if (rc == -EAGAIN)
                 {
@@ -334,7 +334,7 @@ more:
 
                 if(sc == NULL)
                 {
-                        //Renjs Ð¼Óëror´¦À·½¿
+                        //Renjs ÃÂ¼Ã“Ã«rorÂ´Â¦Ã€Â·Â½Â¿
                         struct iscsi_hdr * hdr;
                         struct itt_work * work;
                         hdr = conn->in.hdr;
@@ -366,7 +366,7 @@ more:
                         }
                 }
 
-                rc = kiscsi_hdr_recv(conn, sc);  // ³¿¦·µ»Ø
+                rc = kiscsi_hdr_recv(conn, sc);  // Â³Â¿Â¦Â·ÂµÂ»Ã˜
                 if (!rc && conn->in.datalen)
                 {
                         conn->in_progress = IN_PROGRESS_DATA_RECV;
@@ -384,7 +384,7 @@ more:
         {
                 if(sc == NULL)
                 {
-                        //Renjs Ð¼Óëror´¦À·½¿
+                        //Renjs ÃÂ¼Ã“Ã«rorÂ´Â¦Ã€Â·Â½Â¿
                         struct iscsi_hdr * hdr;
                         struct itt_work * work;
                         hdr = conn->in.hdr;
@@ -2157,7 +2157,7 @@ exit:
 	conn->in.len = res;
 	//BUG_ON(conn->in.copy <= 0);
 	//printf ("kiscsi_tcp_recv: in %d bytes\n", conn->in.copy);
-	// ´òÓ¡
+	// Â´Ã²Ã“Â¡
 	
 	printf("tcp_data_recv = 0x ");
 	int x = 0;
@@ -2172,14 +2172,14 @@ more:
 
 	if (conn->in_progress == IN_PROGRESS_WAIT_HEADER || conn->in_progress == IN_PROGRESS_HEADER_GATHER)
 	{
-		// ³éÈ¡Í·²¿ÐÅÏ¢
+		// Â³Ã©ÃˆÂ¡ÃÂ·Â²Â¿ÃÃ…ÃÂ¢
 		rc = kiscsi_mhdr_extract(conn);  
 		if (rc == -EAGAIN)
 			goto nomore;
 		/*
 		 * Verify and process incoming PDU header.
 		 */
-		rc = kiscsi_mhdr_recv(conn);  // ³É¹¦·µ»Ø0
+		rc = kiscsi_mhdr_recv(conn);  // Â³Ã‰Â¹Â¦Â·ÂµÂ»Ã˜0
 
 		//printf("kiscsi_tcp_recv: hdr_recv  rc = %d, conn->in.datalen = %d, conn->in.copy = %d \n", rc, conn->in.datalen, conn->in.copy);
 		
@@ -2348,7 +2348,7 @@ more:
 	if (conn->in_progress == IN_PROGRESS_WAIT_HEADER || conn->in_progress == IN_PROGRESS_HEADER_GATHER)
 	{
 	
-          // ³éÈ¡Í·²¿ÐÅÏ¢
+          // Â³Ã©ÃˆÂ¡ÃÂ·Â²Â¿ÃÃ…ÃÂ¢
           rc = kiscsi_hdr_extract(conn);
          // printf(" after rc = kiscsi_hdr_extract(conn);  \n");
           //Renjs
@@ -2408,7 +2408,7 @@ more:
 
 		if(sc == NULL)
 		{
-			//Renjs Ðè¼ÓÈëerror´¦Àí·½Ê½
+			//Renjs ÃÃ¨Â¼Ã“ÃˆÃ«errorÂ´Â¦Ã€Ã­Â·Â½ÃŠÂ½
 			struct iscsi_hdr * hdr;
 			struct itt_work * work;
 			hdr = conn->in.hdr;
@@ -2472,7 +2472,7 @@ more:
 		/*
 		 * Verify and process incoming PDU header.
 		 */
-		rc = kiscsi_hdr_recv(conn, sc);  // ³É¹¦·µ»Ø0
+		rc = kiscsi_hdr_recv(conn, sc);  // Â³Ã‰Â¹Â¦Â·ÂµÂ»Ã˜0
 		//printf("kiscsi_tcp_data_recv: [hdr_recv]  rc = %d, conn->in.len = %d, conn->in.datalen = %d, conn->in.offset = %d \n", rc, conn->in.len, conn->in.datalen, conn->in.offset);
 
 		
@@ -2906,7 +2906,7 @@ static inline int kiscsi_sendhdr(struct iscsi_conn *conn, struct iscsi_buf *buf)
 	offset = buf->offset + buf->sent;
 	size = buf->length - buf->sent;
 
-	// ´òÓ¡
+	// Â´Ã²Ã“Â¡
 	//printf("kiscsi_sendhdr: sendhdr = 0x ");
 	//int x = 0;
 	//for(x=0; x<size; x++)
@@ -2971,7 +2971,7 @@ static inline int kiscsi_sendpage(struct iscsi_conn *conn, struct iscsi_buf *buf
 	offset = buf->offset + buf->sent;
 	
 
-	// ´òÓ¡
+	// Â´Ã²Ã“Â¡
 	//printf("sendpage= 0x ");
 	//int x = 0;
 	//for(x=0;x<size;x++)
@@ -3396,7 +3396,7 @@ kiscsi_mtask_xmit(struct iscsi_conn *conn, struct iscsi_mgmt_task *mtask)
 	if (mtask->xmstate & XMSTATE_IMM_HDR) 
 	{
 		mtask->xmstate &= ~XMSTATE_IMM_HDR; 
-		// ÇåÁã
+		// Ã‡Ã¥ÃÃ£
 
 		if (mtask->data_count)
 			mtask->xmstate |= XMSTATE_IMM_DATA;
@@ -3405,11 +3405,11 @@ kiscsi_mtask_xmit(struct iscsi_conn *conn, struct iscsi_mgmt_task *mtask)
 		//if (kiscsi_sendhdr(conn, &mtask)) 
 		if (kiscsi_sendhdr(conn, &mtask->headbuf)) 
 		{
-			// ·¢ËÍÊ§°Ü
+			// Â·Â¢Ã‹ÃÃŠÂ§Â°Ãœ
 			mtask->xmstate |= XMSTATE_IMM_HDR;
 			if (mtask->data_count)
 				mtask->xmstate &= ~XMSTATE_IMM_DATA;
-			// ÖØÐÂ»Øµ½XMSTATE_IMM_DATA
+			// Ã–Ã˜ÃÃ‚Â»Ã˜ÂµÂ½XMSTATE_IMM_DATA
 			return -EAGAIN;
 		}
 	}
@@ -3425,7 +3425,7 @@ kiscsi_mtask_xmit(struct iscsi_conn *conn, struct iscsi_mgmt_task *mtask)
 		{
 			if (kiscsi_sendpage(conn, &mtask->sendbuf, &mtask->data_count, &mtask->sent)) 
 			{
-				// ·¢ËÍÊ§°Ü
+				// Â·Â¢Ã‹ÃÃŠÂ§Â°Ãœ
 				mtask->xmstate |= XMSTATE_IMM_DATA;
 				return -EAGAIN;
 			}
@@ -3502,7 +3502,9 @@ static int kiscsi_data_xmit(struct iscsi_conn *conn)
 
 	conn->in_progress_xmit = IN_PROGRESS_XMIT_SCSI;
 	//printf("kiscsi_data_xmit: kiscsi_data_xmit done!!!          conn->in_progress_xmit = IN_PROGRESS_XMIT_SCSI! \n");
-	
+	//st
+
+    //ihuiohiouhuigiugvuifvgyufyucf
 	return 0;
 }
 
@@ -3698,7 +3700,7 @@ fault:
 
 #ifdef CMD
 
-//  Ìî³äiscsi_queue
+//  ÃŒÃ®Â³Ã¤iscsi_queue
 static int
 iscsi_pool_init(struct iscsi_queue *q, int max, void ***items, int item_size)
 {
@@ -3778,7 +3780,7 @@ int kiscsi_ctask_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 			return 0; /* wait for Data-In */
 		}
 		ctask->xmstate |= XMSTATE_R_HDR;
-		// »¹Ô­
+		// Â»Â¹Ã”Â­
 		return -EAGAIN;
 	}
 
