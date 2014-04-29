@@ -1,0 +1,784 @@
+/***********************************************************************
+
+  OCTEON TOOLKITS                                                         
+  Copyright (c) 2007 Cavium Networks. All rights reserved.
+
+  This file, which is part of the OCTEON TOOLKIT from Cavium Networks,
+  contains proprietary and confidential information of Cavium Networks
+  and in some cases its suppliers.
+
+  Any licensed reproduction, distribution, modification, or other use of
+  this file or confidential information embodied in this file is subject
+  to your license agreement with Cavium Networks. The applicable license
+  terms can be found by contacting Cavium Networks or the appropriate
+  representative within your company.
+
+  All other use and disclosure is prohibited.
+
+  Contact Cavium Networks at info@caviumnetworks.com for more information.
+
+ ************************************************************************/ 
+
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <assert.h>
+#include "cvm-common-errno.h"
+
+#include "cvmx-config.h"
+#include "global-config.h"
+
+#if defined(CVM_COMBINED_APP_STACK)
+
+#include "cvmx.h"
+#include "cvmx-packet.h"
+#include "cvmx-pko.h"
+#include "cvmx-fau.h"
+#include "cvmx-wqe.h"
+#include "cvmx-spinlock.h"
+#include "cvmx-malloc.h"
+#include "cvmx-coremask.h"
+#include "cvmx-sysinfo.h"
+
+#include "cvm-ip-in.h"
+#include "cvm-ip.h"
+#include "cvm-ip-if-var.h"
+
+#ifdef INET6
+#include "cvm-in6.h"
+#include "cvm-in6-var.h"
+#include "cvm-ip6.h"
+#include "cvm-ip6-var.h"
+#endif
+
+#include "socket.h"
+#include "socketvar.h"
+
+#include "cvm-tcp-var.h"
+
+#include "cvm-socket.h"
+#include "cvm-socket-cb.h"
+#include "cvm-socket-raw.h"
+
+#include "inic.h"
+
+#include "app-iscsi-cb.h"
+#include "iSCSI-typedefs.h"
+#include "initiator.h"
+#include "iscsi_tcp.h"
+
+CVMX_SHARED uint64_t xxx = 0;
+
+//Renjs
+CVMX_SHARED cvmx_spinlock_t iscsilock[10];
+CVMX_SHARED uint64_t nextlun = 0;
+CVMX_SHARED uint64_t lunip[6];
+CVMX_SHARED uint64_t init_group;
+//#define MAX_LUN_NUMBER 5
+#define TOTAL_LUN_NUMBER 2
+
+/*
+typedef struct
+{
+        uint64_t lun_num;        
+        uint64_t sector_size;      
+        uint64_t sector_num[MAX_LUN_NUMBER];  
+}iSCSI_DiskInfo;
+typedef struct
+{
+        uint64_t initialize_status; 
+        uint8_t data_pool; 
+        iSCSI_DiskInfo* disk_info; 
+}iSCSI_Init_Result;
+*/
+//Renjs
+CVMX_SHARED cvmx_spinlock_t mylock[TOTAL_LUN_NUMBER];
+CVMX_SHARED uint64_t byte_recv = 0;
+CVMX_SHARED uint64_t recv_time = 0;
+CVMX_SHARED int64_t cc = 0;
+CVMX_SHARED extern  uint64_t run = 0;
+//Renjs
+CVMX_SHARED uint64_t mycontext[TOTAL_LUN_NUMBER];
+//CVMX_SHARED uint64_t mytime = 0;
+uint64_t mytime = 0;
+uint64_t writetime = 0;
+int wi = 0;
+CVMX_SHARED uint64_t recvtime = 0;
+CVMX_SHARED uint64_t datatime = 0;
+CVMX_SHARED uint64_t read_position[6];
+CVMX_SHARED uint64_t write_position = 0;
+CVMX_SHARED int ctw = 0;
+extern int numwin = 0 ;
+int ittdec = 0;
+int sss = 0;
+//Renjs
+int iSCSI_Initialize(uint64_t context, uint64_t group)
+{	
+	int i;
+	for(i = 0;i < TOTAL_LUN_NUMBER; i++)
+	{
+		lunip[i] = 106 + i;
+		cvmx_spinlock_init(&(mylock[i]));
+	}
+	
+	//for(i = 0;i < 6; i++)
+  init_group = group;
+	iSCSI_Login();
+  /*
+	cvmx_wqe_t * work = (cvmx_wqe_t *) cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_WQE_POOL);
+	memset(work, 0, sizeof(cvmx_wqe_t));
+	work->grp = ISCSI_GRP;
+	work->tag_type = CVMX_POW_TAG_TYPE_ATOMIC;
+	work->tag = ISCSI_TAG_BASE;
+	cvmx_pow_work_submit(work, work->tag, work->tag_type, work->qos, 10);
+  */
+  return 0;
+}
+
+int iscsi_recv (iSCSI_context * current_context1)
+{
+        uiscsi_conn_t *conn = current_context1->conn;
+        while(1)
+        {
+                uint64_t a = cvmx_get_cycle();
+
+
+
+
+                struct scsi_cmnd *sc = NULL;
+                int res = kiscsi_tcp_data_recv((struct iscsi_conn *)(conn->handle), sc);
+
+                if(res < -1)
+                        printf("res is %d,  xxx is %d cc is %d\n", res, xxx, cc);
+                if(res <= 0)
+                        break;
+        }
+        return 0;
+}
+
+
+
+
+
+int iSCSI_system_notification (uint32_t fd, void* context, uint32_t event_flags)
+{
+        int coreid = cvmx_get_core_num();
+        //printf(" 11-11  coreid = %d \n",coreid);
+          int result = 0;
+        iSCSI_context * current_context = (iSCSI_context *) (context);
+        mycontext[current_context->lun] = context;
+        //printf("11-8    mycontext[%d] = context     ",current_context->lun);
+        /*
+        if((iSCSI_context *)  mycontext[current_context->lun] == NULL)
+                printf("mycontext[%d] == NULL\n",current_context->lun);
+        else 
+                printf("mycontext[%d] != NULL\n",current_context->lun);
+         */
+        uint32_t tag = ISCSI_TAG_BASE | current_context->socket_fd;
+        if(fd != current_context->socket_fd)
+	{
+		printf("[iSCSI SYSTEM]socket fd does not match\n");
+		return -1;
+	}
+	//cvmx_pow_tag_sw_full(cvmx_phys_to_ptr(current_context->lock), tag, CVMX_POW_TAG_TYPE_ATOMIC, ISCSI_GRP);
+	//cvmx_pow_tag_sw_wait();
+
+
+	if(current_context->state != iSCSI_RUN)
+		printf("context state is %d!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!,	event_flags is %d\n", current_context->state, event_flags);
+	
+	switch (event_flags) {
+		case CVM_SO_CONN_ESTABLISHED:
+			printf("TCP connectiong is established!!!!!!!!!!!!!!!!,	context state is %d context ip is %d\n ", current_context->state,current_context->ip);
+			if(current_context->state == iSCSI_START_CONNECT) //Login中的异步connect函数执行完毕，得到TCP连接建立成功回应
+			{
+				current_context->state = iSCSI_SEND_LOGIN_PDU; 
+				result = session_login_send_login_pdu(current_context);				
+			}
+			else
+			{
+				result = -1;
+			}
+			break;
+		case CVM_SO_CONN_ERROR:
+			{
+			}
+			break;
+		case CVM_SO_CAN_READ:
+      if(coreid == 0 && run == 1)
+        {
+            //printf("iSCSI_system_notification   coreid == 0 && run == 1\n");
+            return 0 ;
+        }
+
+			//printf("   case CVM_SO_CAN_READ    context ip is %d\n ",current_context->ip);
+			//printf("context state is %d\n", current_context->state);
+			if(current_context->state == iSCSI_SEND_LOGIN_PDU) //已经发送了Login的PDU，接收回应信息，开始发送Login过程中的cmd
+			{
+
+             if(cvmx_spinlock_trylock(&(mylock[current_context->lun])))
+                      return 0;
+              printf("   current_context->state == iSCSI_SEND_LOGIN_PDU    context ip is %d\n ",current_context->ip);
+              current_context->state = iSCSI_SEND_LOGIN_CMD;
+              result = session_login_send_login_cmd(current_context);
+              current_context->state = iSCSI_RUN;
+
+              //Renjs
+              nextlun++;
+              printf("CVM_SO_CAN_READ after nextlun++   nextlun is %d\n",nextlun);
+              if(nextlun <= (TOTAL_LUN_NUMBER - 1))
+              {
+                      //printf("@@@@@@@@@@@@  before login  nextlun = %d ,run = %d\n",nextlun, run);
+                      iSCSI_Login();
+                     // printf("@@@@@@@@@@@@@@@@@   after login   \n");
+              }
+              else
+              {
+                      printf("%%%%%%%%%%%%%%%%nextlun = %d, let run = 1 \n ",nextlun);
+                      run = 1;
+                      cvmx_wqe_t * work = (cvmx_wqe_t *) cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_WQE_POOL);
+                      iSCSI_DiskInfo * disk = (iSCSI_DiskInfo *) cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_PACKET_POOL);
+                      memset(work, 0, sizeof(cvmx_wqe_t));
+                      work->grp = init_group;
+                      work->tag_type = CVMX_POW_TAG_TYPE_ATOMIC;
+                      work->tag = ISCSI_TAG_BASE;
+                      //iSCSI_DiskInfo disk;
+                      iSCSI_Init_Result * init_re = (iSCSI_Init_Result *) work->packet_data;
+                      //disk.lun_num = 6;
+                      //disk.sector_num = 512;
+                      //init_re.disk_info = &disk;
+                      init_re->initialize_status = 0;
+                      init_re->data_pool = CVMX_FPA_PACKET_POOL;
+                      init_re->disk_info = disk;
+                      disk->lun_num = 6;
+                      disk->sector_size = 512;
+
+                      cvmx_pow_work_submit(work, work->tag, work->tag_type, work->qos, init_group);
+              }
+              cvmx_spinlock_unlock(&(mylock[current_context->lun]));
+              //run = 1;
+
+
+
+
+              /*printf("data_list_t size is %d\n", sizeof(data_list_t));
+                data_list_t * data_head = cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_WQE_POOL);
+                data_head->data_ptr = cvmx_ptr_to_phys(cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_PACKET_POOL));
+                data_head->data_pool = CVMX_FPA_PACKET_POOL; 
+                data_head->data_len = 1024;
+                data_head->offset = 0; 
+                data_head->copied = data_head->offset; 
+                data_head->next = NULL;
+                iSCSI_Read_asyn(0, 1000, 1024, data_head, 0x1234, 10);*/
+
+
+
+
+
+			}
+			else if(current_context->state == iSCSI_SEND_LOGIN_CMD) //iSCSI进入Login中的scan host流程，另外一个核在阻塞等待TCP连接上的结果
+			{
+				current_context->state = iSCSI_SEND_LOGIN_CMD;
+				current_context->syn_among_core = 0;
+				//printf("current_context->syn_among_core is %d\n", current_context->syn_among_core);
+			}
+			else if(current_context->state == iSCSI_RUN)
+			{
+				//if(cvmx_get_cycle() - datatime > 800000000)
+				//{
+				//	printf("========%d,	itt:%llu\n", byte_recv, current_context->itt_used);
+				//	datatime = cvmx_get_cycle();
+				//}
+					
+#if 0
+				//cvmx_pow_tag_sw_full(cvmx_phys_to_ptr(current_context->lock), tag, CVMX_POW_TAG_TYPE_ATOMIC, ISCSI_GRP);
+			        //cvmx_pow_tag_sw_wait();
+				if(current_context->syn_among_core == 0)
+					current_context->syn_among_core = 1;
+				else
+				{
+					//printf("not recv data,hahahahahahhahhaahahhaah!\n");
+					//cvmx_pow_tag_sw_null();
+					return 0;
+				
+				}
+				//cvmx_pow_tag_sw_null();
+#endif
+				//if(cvmx_get_core_num() == 1)
+				//	return 0;
+				/*if(cvmx_spinlock_locked(&current_context->lock))
+					return 0;
+				cvmx_spinlock_lock(&current_context->lock);*/
+				if(cvmx_spinlock_trylock(&(mylock[current_context->lun])))
+					return 0;
+				//cvmx_spinlock_lock(&mylock);
+        // printf("iSCSI_system_notification   iscsi_run   enter   lun = %d\n",current_context->lun);
+
+        iscsi_recv (current_context);
+        /*
+				uiscsi_session_t *session = current_context->session;
+			        uiscsi_conn_t *conn = current_context->conn;
+				while(1)
+				{
+					uint64_t a = cvmx_get_cycle();
+
+
+
+
+					struct scsi_cmnd *sc = NULL;
+					int res = kiscsi_tcp_data_recv((struct iscsi_conn *)(conn->handle), sc);
+
+					if(res < -1)
+						printf("res is %d,	xxx is %d	cc is %d\n", res, xxx, cc);
+					if(res <= 0)
+						break;
+				}
+        */
+				//cvmx_spinlock_unlock(&current_context->lock);
+				cvmx_spinlock_unlock(&(mylock[current_context->lun]));
+				//printf("iSCSI_system_notification   iscsi_run leave  lun = %d \n",current_context->lun);
+				//cvmx_pow_tag_sw_full(cvmx_phys_to_ptr(current_context->lock), tag, CVMX_POW_TAG_TYPE_ATOMIC, ISCSI_GRP);
+                                //cvmx_pow_tag_sw_wait();
+                                //current_context->syn_among_core = 0;
+                                //cvmx_pow_tag_sw_null();
+			}
+			break;
+		case CVM_SO_RX_CLOSE:
+			{			
+				printf("close\n");
+			}
+			break;	
+	}
+
+
+
+	//cvmx_pow_tag_sw_null();
+	return 0;
+}
+
+
+int cvm_register_dni_callback (void)
+{
+	int error = 0;
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	do {
+
+		if ((error = cvm_so_register_function ((void *) iscsi_init_global, CVM_SO_FNPTR_INIT_GLOBAL, 0))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_init_global failed\n");
+			break;
+		}
+
+		if ((error = cvm_so_register_function ((void *) iscsi_init_local, CVM_SO_FNPTR_INIT_LOCAL, 0))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_init_local failed\n");
+			break;
+		}
+
+		if ((error = cvm_so_register_function ((void *) iscsi_main_global, CVM_SO_FNPTR_MAIN_GLOBAL, 0))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_main_global failed\n");
+			break;
+		}
+
+		if ((error = cvm_so_register_function ((void *) iscsi_main_local, CVM_SO_FNPTR_MAIN_LOCAL, 0))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_main_local failed\n");
+			break;
+		}
+
+		if ((error = cvm_so_register_function ((void *) iscsi_timeout_handler, CVM_SO_FNPTR_TIMEOUT_HANDLER, 0xfffffff))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_timeout_handler failed\n");
+			break;
+		}
+
+		if ((error = cvm_so_register_function ((void *) iscsi_notification, CVM_SO_FNPTR_NOTIFICATION, 0))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_notification failed\n");
+			break;
+		}
+
+		if ((error = cvm_so_register_function ((void *) iscsi_exit_global, CVM_SO_FNPTR_EXIT_GLOBAL, 0))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_exit_global failed\n");
+			break;
+		}
+
+		if ((error = cvm_so_register_function ((void *) iscsi_exit_local, CVM_SO_FNPTR_EXIT_LOCAL, 0))
+				!= 0) {
+			CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_ERROR, "registering iscsi_exit_local failed\n");
+			break;
+		}
+
+	} while (0);
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+}
+
+int iscsi_init_global () {
+	int error = 0;
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+}
+
+int iscsi_init_local () {
+	int error = 0;
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+}
+
+int iscsi_main_global ()
+{
+	int error = 0;
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	//Renjs
+	 iSCSI_Initialize(10,10);
+	//iSCSI_Login();
+
+	//cvmx_spinlock_init(&mylock);
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+}
+
+int iscsi_main_local () {
+	int error = 0;
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+}
+
+int numwin ;
+
+int iscsi_timeout_handler () 
+{
+if(cvmx_get_cycle() - mytime > 8000000000)
+        //printf("timeouthandler ctw = %d\n",ctw);
+        if(run == 0)
+                return 0 ;
+        /*
+        int coreid = cvmx_get_core_num();
+        int culun;
+        if(coreid == 0)
+            culun = 0;
+        else if( coreid == 1)
+            culun = 1;
+        else
+            return 0;
+        */
+//printf("####################   numwin = %d \n",numwin);
+        //Renjs
+        // printf("entering iscsi_timeout_handler\n");
+        int coreid = cvmx_get_core_num();
+        //printf(" 11-11  coreid = %d \n",coreid);
+        if(coreid == 0)
+                return 0 ;
+        //if(run == 0)
+        //        return 0 ;
+        int culun = rand() % 2;//rand() % TOTAL_LUN_NUMBER;
+        int error = 0;
+
+        //iSCSI_context * current_context = (iSCSI_context *) (mycontext[culun]);	
+        //if(culun != current_context->lun)
+        //printf("culun != current_context->lun   \n");
+       // int culun = rand() % 2 ;//rand() % 2;//rand() % 2;//rand() % TOTAL_LUN_NUMBER;
+        iSCSI_context * current_context = (iSCSI_context *) (mycontext[culun]);
+        if(run == 1 && culun != current_context->lun)
+                printf("culun != current_context->lun   \n");
+
+        if(cvmx_get_cycle() - mytime > 8000000000)
+        {
+                //if (current_context != NULL)
+                //	printf("run is %d,	current_context->itt_used is %d\n", run, current_context->itt_used);
+                cvmx_pow_iq_com_cnt_t pow_iq_com_cnt;
+                pow_iq_com_cnt.u64 = cvmx_read_csr(CVMX_POW_IQ_COM_CNT);
+                printf("PAKCET:%llu,     WQE:%llu,   POW:%llu\n", cvmx_read_csr(CVMX_FPA_QUEX_AVAILABLE(CVMX_FPA_PACKET_POOL)), cvmx_read_csr(CVMX_FPA_QUEX_AVAILABLE(CVMX_FPA_WQE_POOL)), pow_iq_com_cnt.s.iq_cnt);
+                printf("####################   numwin = %d \n",numwin);
+                printf("--------------------   ittdec = %d \n",ittdec);
+                if(run == 1)
+                {
+          //      printf("run == 1\n");
+                printf("current_context->itt_used is %d\n", current_context->itt_used);
+                }
+            //    printf("after run == 1 \n");
+               // if(current_context == NULL)
+                 // printf("current_context == NULL\n");
+             //   if(current_context->itt_used >= 50)
+               //   sss++;
+                //printf("after  if(current_context->itt_used >= 50) \n");
+                    int res = 0;
+                    int len = 0;
+               /*   if(sss > 2)
+                  {
+                    uiscsi_conn_t *conn = current_context->conn;
+                    char buf[8192];
+
+                    do
+                    {
+
+                    res = cvm_so_recv(((struct iscsi_conn *)(conn->handle))->socket, buf, 8192, 0);
+                    if(res > 0)
+                    {
+                      int i;
+                      for(i = 0; i < res; i++)
+                       printf("%x", buf[i]);
+                      printf("\n");
+                    }
+
+                    len += res;
+                    printf("len is %d\n", len);
+                    }while(res > 0);
+                  
+                  }
+                  */
+                //cvmx_pow_tag_sw_full(0x12345678, 0x1234, CVMX_POW_TAG_TYPE_ATOMIC, 0);
+                //cvmx_pow_tag_sw_wait();
+                /*if(pow_iq_com_cnt.s.iq_cnt != 0)
+                {    
+                        printf("work num is %d\n", pow_iq_com_cnt.s.iq_cnt);
+                        cvmx_wqe_t * work = NULL;
+                        while(work == NULL)
+                        {
+                        work = cvmx_pow_work_request_sync(CVMX_POW_WAIT);
+                        if(work != NULL)
+                                printf("I get work! work tag is %llX\n", work->tag);
+                                }
+                }
+                cvmx_pow_tag_req_t current_tag;
+                current_tag = cvmx_pow_get_current_tag();
+                printf("+++++++++++++++%llX, %llX\n", current_tag.s.type, current_tag.s.tag);*/
+                mytime = cvmx_get_cycle();
+        }
+        /*
+        int coreid = cvmx_get_core_num();
+          int culun;
+         if(coreid == 0)
+             culun = 0;
+         else if( coreid == 1)
+            culun = 1;
+         else
+            return 0;
+            */
+        //if(run == 0)
+        //        return 0 ;
+        if(cvmx_spinlock_trylock(&(mylock[culun])))
+                return 0;
+        //printf("timeouthandler   cvmx_spinlock_trylock(&(mylock[culun]))    enter  lun = %d\n",culun);
+        //if(run >= 1 && current_context->itt_used <= 60 && cvmx_get_core_num() == 1)
+	//printf("!!!!!!!!!!!!!!!nextlun   is   %d\n",nextlun);
+	if(run >= 1 && current_context->itt_used <= 50 && nextlun >= TOTAL_LUN_NUMBER )
+		//if(xxx >= 3)
+	{
+		//printf("mycontext->itt_used is %d\n", current_context->itt_used);
+		//cvmx_spinlock_lock(&mylock);
+		//printf("@@@@@@@@@@timeout_handler: nextlun = %d \n",nextlun);
+		//if(cvmx_spinlock_trylock(&mylock))
+		//                        return 0;
+		//cvmx_spinlock_lock(&mylock);
+
+
+		//cvmx_pow_tag_sw_full(cvmx_phys_to_ptr(mylock), 0x1234, CVMX_POW_TAG_TYPE_ATOMIC, ISCSI_GRP);
+		//cvmx_pow_tag_sw_wait();
+		uint64_t a = cvmx_get_cycle();
+		//printf(":^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
+	//	uint64_t position1 = 100000 +  rand() % 10000;
+		int read_k = 190;
+    int write_k = 15;
+		/*if(xxx % 2 == 0)
+			k = 2;
+		else
+			k = 206;
+		*/
+		//ctw++;
+		int i, j;
+    /*
+    //if(culun == 1)
+	//printf("timeouthandler before write!\n");	
+		//for(i=0;i<100000;i++)
+		{
+			
+			data_list_t * data_head = NULL;
+			data_list_t * temp_data_head = NULL;
+			
+			for(j=0;j<write_k;j++)
+			{
+				data_list_t * next_data_head = cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_WQE_POOL);
+				next_data_head->data_ptr = cvmx_ptr_to_phys(cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_PACKET_POOL));
+				next_data_head->data_pool = CVMX_FPA_PACKET_POOL;
+				next_data_head->data_len = 2048;
+				next_data_head->offset = 0;
+				next_data_head->copied = next_data_head->offset;
+				next_data_head->next = NULL;
+				
+				if(temp_data_head == NULL)
+				{
+					temp_data_head = next_data_head;
+				}
+				else
+				{	
+					temp_data_head->next = next_data_head;
+					temp_data_head = next_data_head;
+				}
+				
+				if(data_head == NULL)
+					data_head = next_data_head;
+			}
+
+			write_position += (uint64_t)(write_k*4);
+			//1460
+			//memset(cvmx_phys_to_ptr(data_head->data_ptr), xxx%8, 2048);
+			//iSCSI_Read_asyn(0, (uint64_t)(position), 2048*k, data_head, 0x1234, 10);
+			//iSCSI_Read_asyn(0, 100000 + 16*xxx, 8192, data_head, 0x1234, 10);
+			//iSCSI_Read_asyn(0, 100000 + rand() % 10000, 1024, data_head, 0x1234, 10);
+			//numwin++;
+      //if(wi%1000 == 0)
+        //writetime = cvmx_get_cycle();
+			iSCSI_Write_asyn(culun, write_position, 2048*write_k, data_head, 0x1234, 10);
+     // if(wi%1000 == 0)
+       // printf("!!!!!!!!!!!!!!! wi = %d  time = %ld  \n ",wi ,(cvmx_get_cycle() - writetime));
+  	//		wi++;
+		}
+    */
+    //ctw++;
+		//printf("timeouthandler after write!\n"); 
+			//printf("!!!!!!!!!!!!  xxx= %d\n",xxx);
+			
+
+	//	if(culun == 0)
+    
+			//xxx = xxx % 100;
+	//	if(numwin >= 110000)
+		{	
+			data_list_t * data_head1 = NULL;
+			data_list_t * temp_data_head1 = NULL;
+			
+			for(j=0;j<read_k;j++)
+			{
+				data_list_t * next_data_head = cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_WQE_POOL);
+				next_data_head->data_ptr = cvmx_ptr_to_phys(cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_PACKET_POOL));
+				next_data_head->data_pool = CVMX_FPA_PACKET_POOL;
+				next_data_head->data_len = 2048;
+				next_data_head->offset = 0;
+				next_data_head->copied = next_data_head->offset;
+				next_data_head->next = NULL;
+				
+				if(temp_data_head1== NULL)
+				{
+					temp_data_head1= next_data_head;
+				}
+				else
+				{	
+					temp_data_head1->next = next_data_head;
+					temp_data_head1 = next_data_head;
+				}
+				
+				if(data_head1== NULL)
+					data_head1= next_data_head;
+			}
+      //read_position += (uint64_t)(read_k*4 + rand() % 200000);
+      read_position[culun] += (uint64_t)(read_k*4 );
+			iSCSI_Read_asyn(culun,read_position[culun] , 2048*read_k, data_head1, 0x1234, 10);
+			//if(xxx >= 10)
+			//	run = 0;		
+			
+		}
+    
+			xxx++;
+		/*{
+		  data_list_t * data_head = cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_WQE_POOL);
+		  data_head->data_ptr = cvmx_ptr_to_phys(cvm_common_alloc_fpa_buffer_sync(CVMX_FPA_PACKET_POOL));
+		  data_head->data_pool = CVMX_FPA_PACKET_POOL;
+		  data_head->data_len = 1024;
+		  data_head->offset = 0;
+		  data_head->copied = data_head->offset;
+		  data_head->next = NULL;
+		  iSCSI_Read_asyn(0, 100000 + rand() % 10000, 1024, data_head, 0x1234, 10);
+		  }*/
+
+		//printf("============%llu\n", cvmx_get_cycle() - a);
+		//		cvmx_spinlock_unlock(&mylock);
+
+		//cvmx_pow_tag_sw_null();
+	}
+ if(run >= 1 )
+     iscsi_recv(current_context);
+	cvmx_spinlock_unlock(&(mylock[culun]));
+  //printf("timeouthandler    cvmx_spinlock_unlock(&(mylock[culun]))  leave lun = %d\n",culun);
+	//  CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	//  CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+	
+}
+
+/* TBD: event_flags can contain more than one flags */
+int iscsi_notification (uint32_t fd, void* context, uint32_t event_flags)
+{
+	int error = 0;
+
+	if(!context)
+	{
+		printf("Error notification fd =%d context=%lld\n",fd,context);
+		return -1;
+	}
+	//printf("iscsi_notification get context is %llX\n", context);
+
+	uint64_t * type_ptr = (uint64_t*)context;
+	switch((*type_ptr))
+	{
+		case CONTEXT_TYPE_ISCSI_SYSTEM:
+			//printf("context type is %d\n", CONTEXT_TYPE_ISCSI_SYSTEM);
+			iSCSI_system_notification(fd, context, event_flags);
+			break;
+
+		default:
+			printf("Error notification fd =%d context=%lld type=%lld\n",fd,context,(*type_ptr));
+			break;
+	}
+
+	return error;
+}
+
+int iscsi_exit_global ()
+{
+	int error = 0;
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+}
+
+int iscsi_exit_local () {
+	int error = 0;
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, ">>%s (void)\n", __FUNCTION__);
+
+	CVM_COMMON_DBG_MSG (CVM_COMMON_DBG_LVL_INFO, "<<%s (return = %d)\n", __FUNCTION__, error);
+
+	return error;
+}
+
+
+#endif
