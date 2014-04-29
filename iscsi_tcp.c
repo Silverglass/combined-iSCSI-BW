@@ -3501,7 +3501,7 @@ static int kiscsi_data_xmit(struct iscsi_conn *conn)
 
 
 	conn->in_progress_xmit = IN_PROGRESS_XMIT_SCSI;
-	//printf("kiscsi_data_xmit: kiscsi_data_xmit done!!!          conn->in_progress_xmit = IN_PROGRESS_XMIT_SCSI! \n");
+	
 	
 	return 0;
 }
@@ -3778,7 +3778,7 @@ int kiscsi_ctask_xmit(struct iscsi_conn *conn, struct iscsi_cmd_task *ctask)
 			return 0; /* wait for Data-In */
 		}
 		ctask->xmstate |= XMSTATE_R_HDR;
-		// »¹Ô­
+		
 		return -EAGAIN;
 	}
 
